@@ -46,9 +46,9 @@ func vcardContent(fields []field) string {
 			continue
 		}
 		switch f.key {
-		case "TEL":
+		case "TEL", "TEL2":
 			b.WriteString("TEL;TYPE=CELL:" + v + "\n")
-		case "EMAIL":
+		case "EMAIL", "EMAIL2":
 			b.WriteString("EMAIL:" + v + "\n")
 		case "ORG":
 			b.WriteString("ORG:" + v + "\n")

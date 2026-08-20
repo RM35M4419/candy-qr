@@ -15,6 +15,29 @@ func setField(fields []field, key, value string) {
 	}
 }
 
+func TestVcardContentMultipleContacts(t *testing.T) {
+	fields := newFields(vcardSpecs)
+	setField(fields, "GIVEN", "Jane")
+	setField(fields, "FAMILY", "Doe")
+	setField(fields, "TEL", "111")
+	setField(fields, "TEL2", "222")
+	setField(fields, "EMAIL", "a@b.com")
+	setField(fields, "EMAIL2", "c@d.com")
+
+	got := vcardContent(fields)
+	if n := strings.Count(got, "TEL;TYPE=CELL:"); n != 2 {
+		t.Errorf("expected 2 phone numbers, got %d:\n%s", n, got)
+	}
+	if n := strings.Count(got, "EMAIL:"); n != 2 {
+		t.Errorf("expected 2 emails, got %d:\n%s", n, got)
+	}
+	for _, want := range []string{"TEL;TYPE=CELL:111", "TEL;TYPE=CELL:222", "EMAIL:a@b.com", "EMAIL:c@d.com"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
 func TestVcardContent(t *testing.T) {
 	fields := newFields(vcardSpecs)
 	setField(fields, "GIVEN", "Jane")
