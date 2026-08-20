@@ -5,8 +5,8 @@ Guide for AI agents (and humans) working on Candy QR.
 ## What this is
 
 Candy QR is a Linux terminal (TUI) app for creating QR codes. It covers
-three encodings: Wi-Fi credentials, URLs, and vCards. It can print the QR to
-the terminal (when the terminal supports it) and export to PNG.
+three encodings: Wi-Fi credentials, URLs, and vCards. It shows a live QR
+preview inside the TUI and exports to PNG.
 
 ## Stack
 
@@ -25,7 +25,7 @@ the terminal (when the terminal supports it) and export to PNG.
 The app follows the Bubble Tea Elm Architecture:
 
 ```
-Model    — app state (current mode, form fields)
+Model    — app state (current screen, form fields)
 Init     — initial command (returns nil unless I/O is needed)
 Update   — handle Msg (keypresses, form submissions) -> (Model, Cmd)
 View     — render the UI as a string
@@ -33,6 +33,25 @@ View     — render the UI as a string
 
 Keep state in the `Model`. Treat every interaction as a message. Prefer
 declarative views over manual screen redraws.
+
+### Screens
+
+Three screens, driven by a `screen` enum on the `Model`:
+
+1. **Type selection** — pick vCard, Wi-Fi, or URL.
+2. **Form** — text inputs for the selected type, with a live QR preview
+   rendered beside the form, updating in real time as the user types.
+3. **Preview** — the committed QR plus a menu (export PNG, edit, style, quit).
+
+### Keyboard
+
+- `tab` / `shift+tab` — move between form fields
+- `enter` — confirm a field (advance to the next)
+- `ctrl+s` — commit and generate
+- `esc` — back / cancel
+- `ctrl+c` — quit
+
+On-screen instructions are always visible in a footer.
 
 ## Product focus
 
@@ -50,8 +69,8 @@ The three modes are:
 
 Two output paths are required:
 
-- **Terminal print** — render the QR as Unicode blocks to stdout/TUI,
-  detecting terminal capability.
+- **Terminal preview** — render the QR as Unicode blocks inside the TUI,
+  updating in real time as the user types. No stdout printing.
 - **PNG export** — save the QR to a PNG file.
 
 ## Conventions
@@ -72,5 +91,7 @@ Two output paths are required:
 - This is **v0.1**: functionality first, no colors or special design. Colors,
   gradients, rounded corners, and logos are explicitly out of scope until a
   later design pass.
+- A **style menu** is stubbed in the preview screen but not implemented; QR
+  styling (colors, gradients, rounded corners, logos) lands in a later pass.
 - Keep the QR payload encoding and the rendering as separate concerns so the
   "pretty" pass can be layered on without rewriting the core.

@@ -14,11 +14,11 @@ functional and stateful way to build terminal apps.
 
 ## Features
 
-- **Wi-Fi** — share your network name and password as a scannable code
-- **URL** — turn any link into a QR code
 - **vCard** — encode your name, phone, email, and more directly into a
   scannable contact that drops into a phone's address book
-- **Print to terminal** — render the QR in your terminal (when it supports it)
+- **Wi-Fi** — share your network name and password as a scannable code
+- **URL** — turn any link into a QR code
+- **Live preview** — watch the QR update in real time as you type
 - **Export to PNG** — save a crisp, shareable image
 
 ## Status
@@ -30,39 +30,45 @@ treatment are on the roadmap.
 ## Install
 
 ```bash
-go install github.com/yourname/candy-qr@latest
+go install github.com/RM35M4419/candy-qr@latest
 ```
 
 ## Usage
 
+One command, one flow:
+
 ```
-candy-qr                 # start the interactive TUI
-candy-qr url <url>       # make a QR from a URL
-candy-qr wifi <ssid> <password>
-candy-qr vcard <file>    # make a QR from a vCard file
+candy-qr
 ```
 
-Run it, pick what you want to share, fill in the fields, and done. Print it
-to the terminal or export a PNG with a keystroke.
+That's it. No flags, no subcommands — just a TUI that walks you through it.
 
-## Why?
+1. **Pick a type** — vCard, Wi-Fi, or URL.
+2. **Fill in the fields** — the form shows every field for that type, with a
+   live QR preview updating in real time as you type.
+3. **Generate** — commit and export to PNG, or tweak the style.
 
-Your contact info, Wi-Fi password, and links all have one thing in common:
-people type them out by hand, and miss a character. QR codes mean you hold up
-a screen and the other person's camera does the rest. Candy QR is the pretty
-little tool that lives in that gap.
+### Keyboard
+
+| Key | Action |
+| --- | --- |
+| `tab` / `shift+tab` | move between fields |
+| `enter` | confirm a field |
+| `ctrl+s` | commit and generate the QR |
+| `esc` | back / cancel |
+
+On-screen instructions are always visible, so you never have to guess what a
+key does.
+
+### vCard first
+
+The vCard flow is the star of the show. It collects the full set of contact
+fields — name, phone, email, company, title, address, website, and notes — so
+someone can scan your screen and drop you straight into their address book.
+
 
 ## Roadmap
 
-- [ ] Logo, colors, and gradients
-- [ ] Rounded corners and styling options
+- [ ] QR style menu — colors, gradients, rounded corners, logos
 - [ ] vCard template presets
 - [ ] Batch export
-
-## Contributing
-
-Pull requests welcome. Keep it sweet.
-
-## License
-
-[MIT](LICENSE)
