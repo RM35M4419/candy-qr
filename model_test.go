@@ -125,7 +125,8 @@ func TestBuildContentDispatch(t *testing.T) {
 	m.typeCursor = 0
 	m.fields = newFields(vcardSpecs)
 	m.fields[0].input.SetValue("Jane")
-	if got := m.buildContent(); !strings.Contains(got, "FN:Jane") {
+	m.fields[1].input.SetValue("Doe")
+	if got := m.buildContent(); !strings.Contains(got, "FN:Jane Doe") {
 		t.Errorf("vcard content = %q", got)
 	}
 

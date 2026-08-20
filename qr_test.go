@@ -17,7 +17,8 @@ func setField(fields []field, key, value string) {
 
 func TestVcardContent(t *testing.T) {
 	fields := newFields(vcardSpecs)
-	setField(fields, "FN", "Jane Doe")
+	setField(fields, "GIVEN", "Jane")
+	setField(fields, "FAMILY", "Doe")
 	setField(fields, "TEL", "+1 555 123 4567")
 	setField(fields, "EMAIL", "jane@example.com")
 
@@ -25,6 +26,7 @@ func TestVcardContent(t *testing.T) {
 	for _, want := range []string{
 		"BEGIN:VCARD",
 		"VERSION:3.0",
+		"N:Doe;Jane;;;",
 		"FN:Jane Doe",
 		"TEL;TYPE=CELL:+1 555 123 4567",
 		"EMAIL:jane@example.com",

@@ -27,7 +27,8 @@ type fieldSpec struct {
 }
 
 var vcardSpecs = []fieldSpec{
-	{"FN", "Name", "Jane Doe"},
+	{"GIVEN", "First name", "Jane"},
+	{"FAMILY", "Last name", "Doe"},
 	{"TEL", "Phone", "+1 555 123 4567"},
 	{"EMAIL", "Email", "jane@example.com"},
 	{"ORG", "Company", "Acme Inc."},

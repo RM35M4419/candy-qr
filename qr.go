@@ -20,26 +20,32 @@ func (m Model) buildContent() string {
 }
 
 func vcardContent(fields []field) string {
-	name := ""
+	given, family := "", ""
 	for _, f := range fields {
-		if f.key == "FN" {
-			name = strings.TrimSpace(f.input.Value())
+		switch f.key {
+		case "GIVEN":
+			given = strings.TrimSpace(f.input.Value())
+		case "FAMILY":
+			family = strings.TrimSpace(f.input.Value())
 		}
 	}
-	if name == "" {
+	formatted := strings.TrimSpace(given + " " + family)
+	if formatted == "" {
 		return ""
 	}
 
 	var b strings.Builder
 	b.WriteString("BEGIN:VCARD\nVERSION:3.0\n")
+	if given != "" || family != "" {
+		b.WriteString("N:" + family + ";" + given + ";;;\n")
+	}
+	b.WriteString("FN:" + formatted + "\n")
 	for _, f := range fields {
 		v := strings.TrimSpace(f.input.Value())
 		if v == "" {
 			continue
 		}
 		switch f.key {
-		case "FN":
-			b.WriteString("FN:" + v + "\n")
 		case "TEL":
 			b.WriteString("TEL;TYPE=CELL:" + v + "\n")
 		case "EMAIL":
