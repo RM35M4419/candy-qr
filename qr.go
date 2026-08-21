@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/skip2/go-qrcode"
@@ -19,27 +20,79 @@ func (m Model) buildContent() string {
 	return ""
 }
 
+func escapeVcard(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, ";", "\\;")
+	s = strings.ReplaceAll(s, ",", "\\,")
+	s = strings.ReplaceAll(s, "\r\n", "\\n")
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	return s
+}
+
+func escapeWifi(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case '\\', ';', ',', ':', '"':
+			b.WriteRune('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 func vcardContent(fields []field) string {
 	given, family := "", ""
+	org, email, tel := "", "", ""
+	hasAnyField := false
+
 	for _, f := range fields {
+		v := strings.TrimSpace(f.input.Value())
+		if v == "" {
+			continue
+		}
+		hasAnyField = true
 		switch f.key {
 		case "GIVEN":
-			given = strings.TrimSpace(f.input.Value())
+			given = v
 		case "FAMILY":
-			family = strings.TrimSpace(f.input.Value())
+			family = v
+		case "ORG":
+			org = v
+		case "EMAIL", "EMAIL2":
+			if email == "" {
+				email = v
+			}
+		case "TEL", "TEL2":
+			if tel == "" {
+				tel = v
+			}
 		}
 	}
+
+	if !hasAnyField {
+		return ""
+	}
+
 	formatted := strings.TrimSpace(given + " " + family)
 	if formatted == "" {
-		return ""
+		if org != "" {
+			formatted = org
+		} else if email != "" {
+			formatted = email
+		} else if tel != "" {
+			formatted = tel
+		} else {
+			formatted = "Contact"
+		}
 	}
 
 	var b strings.Builder
 	b.WriteString("BEGIN:VCARD\nVERSION:3.0\n")
 	if given != "" || family != "" {
-		b.WriteString("N:" + family + ";" + given + ";;;\n")
+		b.WriteString("N:" + escapeVcard(family) + ";" + escapeVcard(given) + ";;;\n")
 	}
-	b.WriteString("FN:" + formatted + "\n")
+	b.WriteString("FN:" + escapeVcard(formatted) + "\n")
 	for _, f := range fields {
 		v := strings.TrimSpace(f.input.Value())
 		if v == "" {
@@ -47,19 +100,19 @@ func vcardContent(fields []field) string {
 		}
 		switch f.key {
 		case "TEL", "TEL2":
-			b.WriteString("TEL;TYPE=CELL:" + v + "\n")
+			b.WriteString("TEL;TYPE=CELL:" + escapeVcard(v) + "\n")
 		case "EMAIL", "EMAIL2":
-			b.WriteString("EMAIL:" + v + "\n")
+			b.WriteString("EMAIL:" + escapeVcard(v) + "\n")
 		case "ORG":
-			b.WriteString("ORG:" + v + "\n")
+			b.WriteString("ORG:" + escapeVcard(v) + "\n")
 		case "TITLE":
-			b.WriteString("TITLE:" + v + "\n")
+			b.WriteString("TITLE:" + escapeVcard(v) + "\n")
 		case "ADR":
-			b.WriteString("ADR;TYPE=WORK:;;" + v + ";;;;\n")
+			b.WriteString("ADR;TYPE=WORK:;;" + escapeVcard(v) + ";;;;\n")
 		case "URL":
 			b.WriteString("URL:" + v + "\n")
 		case "NOTE":
-			b.WriteString("NOTE:" + v + "\n")
+			b.WriteString("NOTE:" + escapeVcard(v) + "\n")
 		}
 	}
 	b.WriteString("END:VCARD")
@@ -82,14 +135,17 @@ func wifiContent(fields []field) string {
 			}
 		}
 	}
-	return fmt.Sprintf("WIFI:T:%s;S:%s;P:%s;;", enc, ssid, password)
+	if strings.TrimSpace(ssid) == "" {
+		return ""
+	}
+	return fmt.Sprintf("WIFI:T:%s;S:%s;P:%s;;", escapeWifi(enc), escapeWifi(ssid), escapeWifi(password))
 }
 
 func urlContent(fields []field) string {
 	if len(fields) == 0 {
 		return ""
 	}
-	return fields[0].input.Value()
+	return strings.TrimSpace(fields[0].input.Value())
 }
 
 func (m Model) renderPreview() string {
@@ -139,9 +195,15 @@ func (m *Model) exportPNG() {
 		m.message = "Nothing to export yet"
 		return
 	}
-	if err := qrcode.WriteFile(content, qrcode.Medium, 512, "candy-qr.png"); err != nil {
+	filename := "candy-qr.png"
+	if err := qrcode.WriteFile(content, qrcode.Medium, 512, filename); err != nil {
 		m.message = "Export failed: " + err.Error()
 		return
 	}
-	m.message = "Saved to candy-qr.png"
+	if abs, err := filepath.Abs(filename); err == nil {
+		m.message = "Saved to " + abs
+	} else {
+		m.message = "Saved to " + filename
+	}
 }
+

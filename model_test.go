@@ -164,8 +164,8 @@ func TestExportPNGSuccess(t *testing.T) {
 	m.fields[0].input.SetValue("https://example.com")
 
 	m.exportPNG()
-	if m.message != "Saved to candy-qr.png" {
-		t.Errorf("message = %q", m.message)
+	if !strings.HasPrefix(m.message, "Saved to ") || !strings.HasSuffix(m.message, "candy-qr.png") {
+		t.Errorf("unexpected export message: %q", m.message)
 	}
 	if _, err := os.Stat("candy-qr.png"); err != nil {
 		t.Errorf("expected candy-qr.png to exist: %v", err)

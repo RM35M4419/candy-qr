@@ -61,6 +61,51 @@ func TestVcardContent(t *testing.T) {
 	}
 }
 
+func TestVcardContentEscaping(t *testing.T) {
+	fields := newFields(vcardSpecs)
+	setField(fields, "GIVEN", "Jane;Jr.")
+	setField(fields, "FAMILY", "Doe, Esq.")
+	setField(fields, "ORG", "Acme, Inc.; Division\\1")
+	setField(fields, "NOTE", "Special, note; with \\ backslash")
+
+	got := vcardContent(fields)
+	for _, want := range []string{
+		"N:Doe\\, Esq.;Jane\\;Jr.;;;",
+		"FN:Jane\\;Jr. Doe\\, Esq.",
+		"ORG:Acme\\, Inc.\\; Division\\\\1",
+		"NOTE:Special\\, note\\; with \\\\ backslash",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("vcard missing escaped %q in:\n%s", want, got)
+		}
+	}
+
+	if gotEsc := escapeVcard("Line 1\nLine 2; text, 1\\2"); gotEsc != "Line 1\\nLine 2\\; text\\, 1\\\\2" {
+		t.Errorf("escapeVcard mismatch: got %q", gotEsc)
+	}
+}
+
+func TestVcardContentNamelessFallback(t *testing.T) {
+	fields := newFields(vcardSpecs)
+	setField(fields, "ORG", "Acme Corp")
+	setField(fields, "EMAIL", "contact@acme.com")
+
+	got := vcardContent(fields)
+	if got == "" {
+		t.Fatal("expected non-empty vcard for company contact")
+	}
+	if !strings.Contains(got, "FN:Acme Corp") {
+		t.Errorf("expected FN:Acme Corp, got:\n%s", got)
+	}
+}
+
+func TestVcardContentEmpty(t *testing.T) {
+	fields := newFields(vcardSpecs)
+	if got := vcardContent(fields); got != "" {
+		t.Errorf("expected empty string for blank vcard fields, got %q", got)
+	}
+}
+
 func TestWifiContent(t *testing.T) {
 	fields := newFields(wifiSpecs)
 	setField(fields, "S", "MyWiFi")
@@ -72,9 +117,28 @@ func TestWifiContent(t *testing.T) {
 	}
 }
 
+func TestWifiContentEmpty(t *testing.T) {
+	fields := newFields(wifiSpecs)
+	if got := wifiContent(fields); got != "" {
+		t.Errorf("expected empty string for blank wifi SSID, got %q", got)
+	}
+}
+
+func TestWifiContentEscaping(t *testing.T) {
+	fields := newFields(wifiSpecs)
+	setField(fields, "S", `My;Wi-Fi:5G\Home,"Office"`)
+	setField(fields, "P", `pass;word:123,"xyz"\`)
+
+	got := wifiContent(fields)
+	want := `WIFI:T:WPA;S:My\;Wi-Fi\:5G\\Home\,\"Office\";P:pass\;word\:123\,\"xyz\"\\;;`
+	if got != want {
+		t.Errorf("wifi content =\n%q\nwant:\n%q", got, want)
+	}
+}
+
 func TestURLContent(t *testing.T) {
 	fields := newFields(urlSpecs)
-	setField(fields, "URL", "https://example.com")
+	setField(fields, "URL", "  https://example.com  ")
 
 	if got := urlContent(fields); got != "https://example.com" {
 		t.Errorf("url content = %q", got)
@@ -117,3 +181,4 @@ func TestNewFieldsFocus(t *testing.T) {
 		t.Error("first field should be focused")
 	}
 }
+
