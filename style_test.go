@@ -62,18 +62,28 @@ func TestColorToHex(t *testing.T) {
 }
 
 func TestPresetsValidity(t *testing.T) {
-	if len(presets) < 5 {
-		t.Fatalf("expected at least 5 presets, got %d", len(presets))
+	if len(presets) != 10 {
+		t.Fatalf("expected exactly 10 presets (5 light and 5 dark), got %d", len(presets))
 	}
-	for _, p := range presets {
+	for i, p := range presets {
 		if _, err := parseHexColor(p.FgStart); err != nil {
 			t.Errorf("preset %s has invalid FgStart %q: %v", p.Name, p.FgStart, err)
 		}
 		if _, err := parseHexColor(p.FgEnd); err != nil {
 			t.Errorf("preset %s has invalid FgEnd %q: %v", p.Name, p.FgEnd, err)
 		}
-		if _, err := parseHexColor(p.BgColor); err != nil {
+		bg, err := parseHexColor(p.BgColor)
+		if err != nil {
 			t.Errorf("preset %s has invalid BgColor %q: %v", p.Name, p.BgColor, err)
+		} else {
+			// Perceived brightness = (R*299 + G*587 + B*114) / 1000
+			brightness := (int(bg.R)*299 + int(bg.G)*587 + int(bg.B)*114) / 1000
+			if i < 5 && brightness < 128 {
+				t.Errorf("expected preset %d (%s) to have light background, got %s (brightness %d)", i, p.Name, p.BgColor, brightness)
+			}
+			if i >= 5 && brightness >= 128 {
+				t.Errorf("expected preset %d (%s) to have dark background, got %s (brightness %d)", i, p.Name, p.BgColor, brightness)
+			}
 		}
 	}
 }

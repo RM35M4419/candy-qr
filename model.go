@@ -445,11 +445,16 @@ func (m Model) styleView() string {
 	if m.styleCursor == 0 {
 		c0 = "> "
 	}
-	left.WriteString(c0 + "Theme Preset:\n")
+	modeTag := "Light Bg"
+	if m.style.PresetIndex >= 5 {
+		modeTag = "Dark Bg"
+	}
+	left.WriteString(fmt.Sprintf("%sTheme Preset (%d/%d · %s):\n", c0, m.style.PresetIndex+1, len(presets), modeTag))
 	left.WriteString("    ◀ " + p.Name + " ▶\n")
 	left.WriteString("    " + lipgloss.NewStyle().Faint(true).Render(p.Description) + "\n")
 	swatch := lipgloss.NewStyle().Foreground(lipgloss.Color(p.FgStart)).Render("■ "+p.FgStart) +
-		" ➔ " + lipgloss.NewStyle().Foreground(lipgloss.Color(p.FgEnd)).Render("■ "+p.FgEnd)
+		" ➔ " + lipgloss.NewStyle().Foreground(lipgloss.Color(p.FgEnd)).Render("■ "+p.FgEnd) +
+		" (Bg: " + p.BgColor + ")"
 	left.WriteString("    " + swatch + "\n\n")
 
 	// 1: Shape / Corners

@@ -37,6 +37,7 @@ type StylePreset struct {
 }
 
 var presets = []StylePreset{
+	// 5 Light Background Presets
 	{
 		ID:          "candy",
 		Name:        "Candy Glam 🍬",
@@ -87,10 +88,12 @@ var presets = []StylePreset{
 		Shape:       ShapeRounded,
 		Gradient:    GradientDiagonal,
 	},
+
+	// 5 Dark Background Presets
 	{
 		ID:          "cyber",
 		Name:        "Cyber Neon ⚡",
-		Description: "Futuristic neon cyan to hot pink on dark",
+		Description: "Futuristic neon cyan to hot pink on obsidian",
 		FgStart:     "#00F5D4",
 		FgEnd:       "#FF007F",
 		BgColor:     "#0B0C10",
@@ -98,12 +101,42 @@ var presets = []StylePreset{
 		Gradient:    GradientDiagonal,
 	},
 	{
-		ID:          "classic",
-		Name:        "Classic Monochrome 🏁",
-		Description: "High-contrast crisp black on white",
-		FgStart:     "#000000",
-		FgEnd:       "#000000",
-		BgColor:     "#FFFFFF",
+		ID:          "synthwave",
+		Name:        "Synthwave 80s 🕶️",
+		Description: "Electric violet to retro cyan on midnight",
+		FgStart:     "#7209B7",
+		FgEnd:       "#4CC9F0",
+		BgColor:     "#05050A",
+		Shape:       ShapeRounded,
+		Gradient:    GradientDiagonal,
+	},
+	{
+		ID:          "magma",
+		Name:        "Firewatch Magma 🔥",
+		Description: "COLOURlovers magma: fiery red to radiant amber",
+		FgStart:     "#FF4E50",
+		FgEnd:       "#F9D423",
+		BgColor:     "#0D0D11",
+		Shape:       ShapeRounded,
+		Gradient:    GradientDiagonal,
+	},
+	{
+		ID:          "toxic",
+		Name:        "Toxic Lime 🧪",
+		Description: "Glowing lime green to electric mint on dark",
+		FgStart:     "#C7F464",
+		FgEnd:       "#00F5D4",
+		BgColor:     "#0D1117",
+		Shape:       ShapeRounded,
+		Gradient:    GradientDiagonal,
+	},
+	{
+		ID:          "darkmono",
+		Name:        "Dark Monochrome 🌘",
+		Description: "High-contrast clean white on pure pitch black",
+		FgStart:     "#FFFFFF",
+		FgEnd:       "#A0AEC0",
+		BgColor:     "#000000",
 		Shape:       ShapeSquare,
 		Gradient:    GradientDiagonal,
 	},
