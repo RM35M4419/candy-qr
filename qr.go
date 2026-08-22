@@ -2,9 +2,16 @@ package main
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	_ "image/jpeg"
+	"image/png"
+	"math"
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/skip2/go-qrcode"
 )
 
@@ -149,44 +156,306 @@ func urlContent(fields []field) string {
 }
 
 func (m Model) renderPreview() string {
-	return "Preview\n\n" + renderQRString(m.buildContent())
+	return "Preview\n\n" + renderStyledQRString(m.buildContent(), m.style)
 }
 
 func renderQRString(content string) string {
+	return renderStyledQRString(content, defaultStyle())
+}
+
+func renderStyledQRString(content string, style QRStyle) string {
 	if strings.TrimSpace(content) == "" {
 		return "(fill in fields to see the QR)"
 	}
-	qr, err := qrcode.New(content, qrcode.Medium)
+	level := qrcode.Medium
+	if style.LogoPath != "" {
+		level = qrcode.Highest
+	}
+	qr, err := qrcode.New(content, level)
 	if err != nil {
 		return "(error generating QR)"
 	}
-	return renderQR(qr)
+	return renderStyledQR(qr, style)
 }
 
 func renderQR(q *qrcode.QRCode) string {
+	return renderStyledQR(q, defaultStyle())
+}
+
+func renderStyledQR(q *qrcode.QRCode, style QRStyle) string {
 	bm := q.Bitmap()
+	rows := len(bm)
+	if rows == 0 {
+		return ""
+	}
+	cols := len(bm[0])
+
+	preset := style.CurrentPreset()
+	fg1, err1 := parseHexColor(preset.FgStart)
+	fg2, err2 := parseHexColor(preset.FgEnd)
+	if err1 != nil {
+		fg1 = color.RGBA{R: 255, G: 101, B: 153, A: 255}
+	}
+	if err2 != nil {
+		fg2 = color.RGBA{R: 120, G: 75, B: 160, A: 255}
+	}
+
+	getFactor := func(x, y int) float64 {
+		switch style.Gradient {
+		case GradientVertical:
+			if rows <= 1 {
+				return 0
+			}
+			return float64(y) / float64(rows-1)
+		case GradientHorizontal:
+			if cols <= 1 {
+				return 0
+			}
+			return float64(x) / float64(cols-1)
+		default:
+			if rows+cols <= 2 {
+				return 0
+			}
+			return float64(x+y) / float64(rows+cols-2)
+		}
+	}
+
 	var b strings.Builder
-	for y := 0; y < len(bm); y += 2 {
-		for x := 0; x < len(bm[y]); x++ {
+	for y := 0; y < rows; y += 2 {
+		for x := 0; x < cols; x++ {
 			top := bm[y][x]
 			bottom := false
-			if y+1 < len(bm) {
+			if y+1 < rows {
 				bottom = bm[y+1][x]
 			}
+
+			tTop := getFactor(x, y)
+			tBot := getFactor(x, y+1)
+			topHex := colorToHex(interpolateColor(fg1, fg2, tTop))
+			botHex := colorToHex(interpolateColor(fg1, fg2, tBot))
+
 			switch {
 			case top && bottom:
-				b.WriteString("█")
+				b.WriteString(lipgloss.NewStyle().
+					Foreground(lipgloss.Color(topHex)).
+					Background(lipgloss.Color(botHex)).
+					Render("▀"))
 			case top && !bottom:
-				b.WriteString("▀")
+				b.WriteString(lipgloss.NewStyle().
+					Foreground(lipgloss.Color(topHex)).
+					Background(lipgloss.Color(preset.BgColor)).
+					Render("▀"))
 			case !top && bottom:
-				b.WriteString("▄")
+				b.WriteString(lipgloss.NewStyle().
+					Foreground(lipgloss.Color(botHex)).
+					Background(lipgloss.Color(preset.BgColor)).
+					Render("▄"))
 			default:
-				b.WriteString(" ")
+				b.WriteString(lipgloss.NewStyle().
+					Foreground(lipgloss.Color(preset.BgColor)).
+					Background(lipgloss.Color(preset.BgColor)).
+					Render(" "))
 			}
 		}
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func drawRoundedRect(img *image.RGBA, x0, y0, x1, y1 int, radius float64, c color.RGBA) {
+	if radius <= 0 {
+		for y := y0; y < y1; y++ {
+			for x := x0; x < x1; x++ {
+				img.SetRGBA(x, y, c)
+			}
+		}
+		return
+	}
+	r2 := radius * radius
+	cx0 := float64(x0) + radius
+	cy0 := float64(y0) + radius
+	cx1 := float64(x1) - radius
+	cy1 := float64(y1) - radius
+
+	for y := y0; y < y1; y++ {
+		fy := float64(y) + 0.5
+		for x := x0; x < x1; x++ {
+			fx := float64(x) + 0.5
+			var inside bool
+			if fx < cx0 && fy < cy0 {
+				dx, dy := fx-cx0, fy-cy0
+				inside = (dx*dx + dy*dy) <= r2
+			} else if fx > cx1 && fy < cy0 {
+				dx, dy := fx-cx1, fy-cy0
+				inside = (dx*dx + dy*dy) <= r2
+			} else if fx < cx0 && fy > cy1 {
+				dx, dy := fx-cx0, fy-cy1
+				inside = (dx*dx + dy*dy) <= r2
+			} else if fx > cx1 && fy > cy1 {
+				dx, dy := fx-cx1, fy-cy1
+				inside = (dx*dx + dy*dy) <= r2
+			} else {
+				inside = true
+			}
+			if inside {
+				img.SetRGBA(x, y, c)
+			}
+		}
+	}
+}
+
+func scaleAndOverlayLogo(dst *image.RGBA, logo image.Image, x0, y0, x1, y1 int) {
+	targetW := x1 - x0
+	targetH := y1 - y0
+	if targetW <= 0 || targetH <= 0 {
+		return
+	}
+	bounds := logo.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+	if srcW == 0 || srcH == 0 {
+		return
+	}
+
+	scale := math.Min(float64(targetW)/float64(srcW), float64(targetH)/float64(srcH))
+	w := int(float64(srcW) * scale)
+	h := int(float64(srcH) * scale)
+	offsetX := x0 + (targetW-w)/2
+	offsetY := y0 + (targetH-h)/2
+
+	for dy := 0; dy < h; dy++ {
+		sy := bounds.Min.Y + int(float64(dy)*float64(srcH)/float64(h))
+		for dx := 0; dx < w; dx++ {
+			sx := bounds.Min.X + int(float64(dx)*float64(srcW)/float64(w))
+			c := logo.At(sx, sy)
+			r, g, b, a := c.RGBA()
+			if a > 0 {
+				dstX := offsetX + dx
+				dstY := offsetY + dy
+				orig := dst.RGBAAt(dstX, dstY)
+				alpha := float64(a) / 65535.0
+				nr := uint8(float64(r>>8)*alpha + float64(orig.R)*(1.0-alpha))
+				ng := uint8(float64(g>>8)*alpha + float64(orig.G)*(1.0-alpha))
+				nb := uint8(float64(b>>8)*alpha + float64(orig.B)*(1.0-alpha))
+				dst.SetRGBA(dstX, dstY, color.RGBA{R: nr, G: ng, B: nb, A: 255})
+			}
+		}
+	}
+}
+
+func renderStyledPNG(content string, style QRStyle, size int, filename string) error {
+	level := qrcode.High
+	if style.LogoPath != "" {
+		level = qrcode.Highest
+	}
+
+	qr, err := qrcode.New(content, level)
+	if err != nil {
+		return err
+	}
+
+	bm := qr.Bitmap()
+	n := len(bm)
+	if n == 0 {
+		return fmt.Errorf("empty QR matrix")
+	}
+
+	modSize := size / n
+	if modSize < 1 {
+		modSize = 1
+	}
+	imgSize := n * modSize
+
+	preset := style.CurrentPreset()
+	fg1, err1 := parseHexColor(preset.FgStart)
+	fg2, err2 := parseHexColor(preset.FgEnd)
+	bg, err3 := parseHexColor(preset.BgColor)
+	if err1 != nil {
+		fg1 = color.RGBA{R: 255, G: 101, B: 153, A: 255}
+	}
+	if err2 != nil {
+		fg2 = color.RGBA{R: 120, G: 75, B: 160, A: 255}
+	}
+	if err3 != nil {
+		bg = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	}
+
+	img := image.NewRGBA(image.Rect(0, 0, imgSize, imgSize))
+	for y := 0; y < imgSize; y++ {
+		for x := 0; x < imgSize; x++ {
+			img.SetRGBA(x, y, bg)
+		}
+	}
+
+	getFactor := func(x, y int) float64 {
+		switch style.Gradient {
+		case GradientVertical:
+			if n <= 1 {
+				return 0
+			}
+			return float64(y) / float64(n-1)
+		case GradientHorizontal:
+			if n <= 1 {
+				return 0
+			}
+			return float64(x) / float64(n-1)
+		default:
+			if 2*n <= 2 {
+				return 0
+			}
+			return float64(x+y) / float64(2*n-2)
+		}
+	}
+
+	radius := 0.0
+	if style.Shape == ShapeRounded {
+		radius = float64(modSize) * 0.35
+	}
+
+	for my := 0; my < n; my++ {
+		for mx := 0; mx < n; mx++ {
+			if bm[my][mx] {
+				t := getFactor(mx, my)
+				modColor := interpolateColor(fg1, fg2, t)
+				x0 := mx * modSize
+				y0 := my * modSize
+				x1 := x0 + modSize
+				y1 := y0 + modSize
+				drawRoundedRect(img, x0, y0, x1, y1, radius, modColor)
+			}
+		}
+	}
+
+	if style.LogoPath != "" {
+		logoFile, err := os.Open(style.LogoPath)
+		if err == nil {
+			defer logoFile.Close()
+			logoImg, _, err := image.Decode(logoFile)
+			if err == nil {
+				badgeSize := int(float64(imgSize) * 0.24)
+				cx := imgSize / 2
+				cy := imgSize / 2
+				bx0 := cx - badgeSize/2
+				by0 := cy - badgeSize/2
+				bx1 := bx0 + badgeSize
+				by1 := by0 + badgeSize
+
+				badgeRadius := float64(badgeSize) * 0.20
+				drawRoundedRect(img, bx0, by0, bx1, by1, badgeRadius, bg)
+
+				pad := int(float64(badgeSize) * 0.12)
+				scaleAndOverlayLogo(img, logoImg, bx0+pad, by0+pad, bx1-pad, by1-pad)
+			}
+		}
+	}
+
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return png.Encode(f, img)
 }
 
 func (m *Model) exportPNG() {
@@ -196,7 +465,7 @@ func (m *Model) exportPNG() {
 		return
 	}
 	filename := "candy-qr.png"
-	if err := qrcode.WriteFile(content, qrcode.Medium, 512, filename); err != nil {
+	if err := renderStyledPNG(content, m.style, 512, filename); err != nil {
 		m.message = "Export failed: " + err.Error()
 		return
 	}

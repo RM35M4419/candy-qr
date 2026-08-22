@@ -15,6 +15,7 @@ const (
 	screenType screen = iota
 	screenForm
 	screenPreview
+	screenStyle
 )
 
 var qrTypes = []string{"vCard", "Wi-Fi", "URL"}
@@ -80,13 +81,25 @@ type Model struct {
 	previewCursor int
 	message       string
 
+	style       QRStyle
+	styleCursor int
+	logoInput   textinput.Model
+
 	width, height int
 }
 
 func initialModel() Model {
+	ti := textinput.New()
+	ti.Placeholder = "logo.png (optional)"
+	ti.Prompt = "  "
+	ti.CharLimit = 250
+	ti.Width = 34
+
 	return Model{
 		screen:     screenType,
 		typeCursor: 0,
+		style:      defaultStyle(),
+		logoInput:  ti,
 	}
 }
 
@@ -128,6 +141,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateForm(msg)
 		case screenPreview:
 			return m.updatePreview(msg)
+		case screenStyle:
+			return m.updateStyle(msg)
 		}
 	}
 	return m, nil
@@ -189,7 +204,11 @@ func (m Model) updatePreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, m.fields[m.fieldIndex].input.Focus()
 			}
 		case "Style":
-			m.message = "Style editing is coming soon ✨"
+			m.screen = screenStyle
+			m.styleCursor = 0
+			m.logoInput.SetValue(m.style.LogoPath)
+			m.logoInput.Blur()
+			m.message = ""
 		case "Quit":
 			return m, tea.Quit
 		}
@@ -198,6 +217,90 @@ func (m Model) updatePreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.fields) > 0 {
 			return m, m.fields[m.fieldIndex].input.Focus()
 		}
+	}
+	return m, nil
+}
+
+func (m Model) updateStyle(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	numItems := 5 // 0: Preset, 1: Shape, 2: Gradient, 3: Logo, 4: Done
+
+	// When focused on Logo input
+	if m.styleCursor == 3 && m.logoInput.Focused() {
+		switch msg.String() {
+		case "tab", "enter", "down":
+			m.style.LogoPath = strings.TrimSpace(m.logoInput.Value())
+			m.logoInput.Blur()
+			m.styleCursor = 4
+			return m, nil
+		case "shift+tab", "up":
+			m.style.LogoPath = strings.TrimSpace(m.logoInput.Value())
+			m.logoInput.Blur()
+			m.styleCursor = 2
+			return m, nil
+		case "esc":
+			m.style.LogoPath = strings.TrimSpace(m.logoInput.Value())
+			m.logoInput.Blur()
+			m.screen = screenPreview
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.logoInput, cmd = m.logoInput.Update(msg)
+			m.style.LogoPath = strings.TrimSpace(m.logoInput.Value())
+			return m, cmd
+		}
+	}
+
+	switch msg.String() {
+	case "up", "k":
+		m.styleCursor = (m.styleCursor - 1 + numItems) % numItems
+		if m.styleCursor == 3 {
+			return m, m.logoInput.Focus()
+		}
+	case "down", "j", "tab":
+		m.styleCursor = (m.styleCursor + 1) % numItems
+		if m.styleCursor == 3 {
+			return m, m.logoInput.Focus()
+		}
+	case "shift+tab":
+		m.styleCursor = (m.styleCursor - 1 + numItems) % numItems
+		if m.styleCursor == 3 {
+			return m, m.logoInput.Focus()
+		}
+	case "left", "h":
+		switch m.styleCursor {
+		case 0:
+			m.style.PresetIndex = (m.style.PresetIndex - 1 + len(presets)) % len(presets)
+		case 1:
+			m.style.Shape = ModuleShape((int(m.style.Shape) + 1) % 2)
+		case 2:
+			m.style.Gradient = GradientDirection((int(m.style.Gradient) - 1 + len(gradientNames)) % len(gradientNames))
+		}
+	case "right", "l":
+		switch m.styleCursor {
+		case 0:
+			m.style.PresetIndex = (m.style.PresetIndex + 1) % len(presets)
+		case 1:
+			m.style.Shape = ModuleShape((int(m.style.Shape) + 1) % 2)
+		case 2:
+			m.style.Gradient = GradientDirection((int(m.style.Gradient) + 1) % len(gradientNames))
+		}
+	case "enter", " ":
+		switch m.styleCursor {
+		case 0:
+			m.style.PresetIndex = (m.style.PresetIndex + 1) % len(presets)
+		case 1:
+			m.style.Shape = ModuleShape((int(m.style.Shape) + 1) % 2)
+		case 2:
+			m.style.Gradient = GradientDirection((int(m.style.Gradient) + 1) % len(gradientNames))
+		case 3:
+			return m, m.logoInput.Focus()
+		case 4:
+			m.style.LogoPath = strings.TrimSpace(m.logoInput.Value())
+			m.screen = screenPreview
+		}
+	case "esc":
+		m.style.LogoPath = strings.TrimSpace(m.logoInput.Value())
+		m.screen = screenPreview
 	}
 	return m, nil
 }
@@ -228,6 +331,8 @@ func (m Model) View() string {
 		return m.formView()
 	case screenPreview:
 		return m.previewView()
+	case screenStyle:
+		return m.styleView()
 	}
 	return ""
 }
@@ -311,7 +416,7 @@ func (m Model) formView() string {
 func (m Model) previewView() string {
 	var b strings.Builder
 	b.WriteString("🍬 Candy QR — " + qrTypes[m.typeCursor] + "\n\n")
-	b.WriteString(renderQRString(m.buildContent()) + "\n\n")
+	b.WriteString(renderStyledQRString(m.buildContent(), m.style) + "\n\n")
 
 	for i, item := range previewMenu {
 		cursor := "  "
@@ -329,6 +434,70 @@ func (m Model) previewView() string {
 	return b.String()
 }
 
+func (m Model) styleView() string {
+	title := "🍬 Candy QR — QR Style & Theme"
+
+	var left strings.Builder
+	p := m.style.CurrentPreset()
+
+	// 0: Preset
+	c0 := "  "
+	if m.styleCursor == 0 {
+		c0 = "> "
+	}
+	left.WriteString(c0 + "Theme Preset:\n")
+	left.WriteString("    ◀ " + p.Name + " ▶\n")
+	left.WriteString("    " + lipgloss.NewStyle().Faint(true).Render(p.Description) + "\n")
+	swatch := lipgloss.NewStyle().Foreground(lipgloss.Color(p.FgStart)).Render("■ "+p.FgStart) +
+		" ➔ " + lipgloss.NewStyle().Foreground(lipgloss.Color(p.FgEnd)).Render("■ "+p.FgEnd)
+	left.WriteString("    " + swatch + "\n\n")
+
+	// 1: Shape / Corners
+	c1 := "  "
+	if m.styleCursor == 1 {
+		c1 = "> "
+	}
+	left.WriteString(c1 + "Module Corners:\n")
+	left.WriteString("    ◀ " + shapeNames[m.style.Shape] + " ▶\n\n")
+
+	// 2: Gradient
+	c2 := "  "
+	if m.styleCursor == 2 {
+		c2 = "> "
+	}
+	left.WriteString(c2 + "Gradient Direction:\n")
+	left.WriteString("    ◀ " + gradientNames[m.style.Gradient] + " ▶\n\n")
+
+	// 3: Logo Path
+	c3 := "  "
+	if m.styleCursor == 3 {
+		c3 = "> "
+	}
+	left.WriteString(c3 + "Center Logo (PNG):\n")
+	left.WriteString("  " + m.logoInput.View() + "\n\n")
+
+	// 4: Apply button
+	c4 := "  "
+	if m.styleCursor == 4 {
+		c4 = "> "
+	}
+	left.WriteString(c4 + "[ Apply & Return to Preview ]\n")
+
+	preview := m.renderPreview()
+
+	leftPanel := lipgloss.NewStyle().Width(42).Render(left.String())
+	rightPanel := lipgloss.NewStyle().PaddingLeft(2).Render(preview)
+
+	var body string
+	if m.width > 0 && m.width < 78 {
+		body = lipgloss.JoinVertical(lipgloss.Left, leftPanel, rightPanel)
+	} else {
+		body = lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
+	}
+
+	return title + "\n\n" + body + "\n\n" + m.footer()
+}
+
 func (m Model) footer() string {
 	switch m.screen {
 	case screenType:
@@ -337,6 +506,8 @@ func (m Model) footer() string {
 		return "tab/shift+tab move · enter next · ctrl+s generate · esc back · ctrl+c quit"
 	case screenPreview:
 		return "↑/↓ select · enter confirm · esc back · ctrl+c quit"
+	case screenStyle:
+		return "↑/↓ move · ←/→ cycle · enter select · esc done · ctrl+c quit"
 	}
 	return ""
 }

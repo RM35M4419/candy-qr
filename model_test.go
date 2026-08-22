@@ -104,8 +104,8 @@ func TestUpdatePreviewStyle(t *testing.T) {
 	m.previewCursor = 2 // "Style"
 
 	styled := update(t, m, key(tea.KeyEnter))
-	if styled.message == "" {
-		t.Error("style should set a message")
+	if styled.screen != screenStyle {
+		t.Errorf("style should switch to screenStyle, got %v", styled.screen)
 	}
 }
 
@@ -248,5 +248,86 @@ func TestUpdateFormTextInput(t *testing.T) {
 	updated := update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	if updated.fields[0].input.Value() != "a" {
 		t.Errorf("expected input value 'a', got %q", updated.fields[0].input.Value())
+	}
+}
+
+func TestUpdateStyleNavigation(t *testing.T) {
+	m := initialModel()
+	m.screen = screenStyle
+	m.fields = newFields(urlSpecs)
+	m.fields[0].input.SetValue("https://example.com")
+	m.styleCursor = 0 // Preset
+
+	// Right arrow on preset -> next preset
+	m = update(t, m, key(tea.KeyRight))
+	if m.style.PresetIndex != 1 {
+		t.Errorf("preset index = %d, want 1", m.style.PresetIndex)
+	}
+
+	// Down arrow -> Shape
+	m = update(t, m, key(tea.KeyDown))
+	if m.styleCursor != 1 {
+		t.Errorf("styleCursor = %d, want 1", m.styleCursor)
+	}
+	m = update(t, m, key(tea.KeyRight))
+	if m.style.Shape != ShapeSquare {
+		t.Errorf("shape = %v, want Square", m.style.Shape)
+	}
+
+	// Down arrow -> Gradient
+	m = update(t, m, key(tea.KeyDown))
+	if m.styleCursor != 2 {
+		t.Errorf("styleCursor = %d, want 2", m.styleCursor)
+	}
+	m = update(t, m, key(tea.KeyRight))
+	if m.style.Gradient != GradientVertical {
+		t.Errorf("gradient = %v, want Vertical", m.style.Gradient)
+	}
+
+	// Down arrow -> Logo input
+	m = update(t, m, key(tea.KeyDown))
+	if m.styleCursor != 3 {
+		t.Errorf("styleCursor = %d, want 3", m.styleCursor)
+	}
+	// Type 'l', 'o', 'g', 'o', '.', 'p', 'n', 'g'
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.style.LogoPath != "l" {
+		t.Errorf("logoPath = %q, want 'l'", m.style.LogoPath)
+	}
+
+	// Enter from logo input moves to Apply
+	m = update(t, m, key(tea.KeyEnter))
+	if m.styleCursor != 4 {
+		t.Errorf("styleCursor = %d, want 4 (Apply)", m.styleCursor)
+	}
+
+	// Enter on Apply returns to Preview
+	m = update(t, m, key(tea.KeyEnter))
+	if m.screen != screenPreview {
+		t.Errorf("enter on Apply should return to screenPreview, got %v", m.screen)
+	}
+}
+
+func TestStyleView(t *testing.T) {
+	m := initialModel()
+	m.screen = screenStyle
+	m.fields = newFields(urlSpecs)
+	m.fields[0].input.SetValue("https://example.com")
+	m.width = 100
+	m.height = 30
+
+	v := m.styleView()
+	if !strings.Contains(v, "Theme Preset") || !strings.Contains(v, "Module Corners") || !strings.Contains(v, "Gradient Direction") {
+		t.Errorf("styleView missing settings: %s", v)
+	}
+	if !strings.Contains(v, "Preview") {
+		t.Errorf("styleView missing preview: %s", v)
+	}
+
+	// Test narrow width
+	m.width = 60
+	narrowView := m.styleView()
+	if !strings.Contains(narrowView, "Theme Preset") {
+		t.Errorf("narrow styleView missing content: %s", narrowView)
 	}
 }
