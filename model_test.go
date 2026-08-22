@@ -172,3 +172,81 @@ func TestExportPNGSuccess(t *testing.T) {
 	}
 	os.Remove("candy-qr.png")
 }
+
+func TestViews(t *testing.T) {
+	m := initialModel()
+	if v := m.View(); !strings.Contains(v, "What do you want to share?") {
+		t.Errorf("typeView missing prompt: %s", v)
+	}
+
+	m.screen = screenForm
+	m.fields = newFields(vcardSpecs)
+	if v := m.View(); !strings.Contains(v, "First name") || !strings.Contains(v, "Preview") {
+		t.Errorf("formView missing expected elements: %s", v)
+	}
+
+	m.screen = screenPreview
+	m.fields[0].input.SetValue("Jane")
+	m.fields[1].input.SetValue("Doe")
+	if v := m.View(); !strings.Contains(v, "Export PNG") {
+		t.Errorf("previewView missing menu item: %s", v)
+	}
+}
+
+func TestFormViewScrolling(t *testing.T) {
+	m := initialModel()
+	m.screen = screenForm
+	m.fields = newFields(vcardSpecs)
+	m.height = 20
+	m.width = 100
+
+	// Cursor at index 0: should show "more below" but not "more above"
+	m.fieldIndex = 0
+	v := m.formView()
+	if !strings.Contains(v, "more below") {
+		t.Errorf("expected bottom scroll indicator when at start, got:\n%s", v)
+	}
+	if strings.Contains(v, "more above") {
+		t.Errorf("unexpected top scroll indicator when at start, got:\n%s", v)
+	}
+
+	// Cursor at last index: should show "more above"
+	m.fieldIndex = len(m.fields) - 1
+	v = m.formView()
+	if !strings.Contains(v, "more above") {
+		t.Errorf("expected top scroll indicator when at end, got:\n%s", v)
+	}
+}
+
+func TestFormViewNarrowLayout(t *testing.T) {
+	m := initialModel()
+	m.screen = screenForm
+	m.fields = newFields(urlSpecs)
+	m.width = 60
+	m.height = 30
+
+	v := m.formView()
+	if !strings.Contains(v, "URL") || !strings.Contains(v, "Preview") {
+		t.Errorf("narrow formView missing elements: %s", v)
+	}
+}
+
+func TestWindowSizeMsg(t *testing.T) {
+	m := initialModel()
+	updated := update(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
+	if updated.width != 120 || updated.height != 40 {
+		t.Errorf("expected 120x40, got %dx%d", updated.width, updated.height)
+	}
+}
+
+func TestUpdateFormTextInput(t *testing.T) {
+	m := initialModel()
+	m.screen = screenForm
+	m.fields = newFields(urlSpecs)
+
+	// Send key 'a'
+	updated := update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	if updated.fields[0].input.Value() != "a" {
+		t.Errorf("expected input value 'a', got %q", updated.fields[0].input.Value())
+	}
+}

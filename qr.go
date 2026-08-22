@@ -206,4 +206,3 @@ func (m *Model) exportPNG() {
 		m.message = "Saved to " + filename
 	}
 }
-

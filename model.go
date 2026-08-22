@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -32,7 +33,8 @@ var vcardSpecs = []fieldSpec{
 	{"TEL", "Phone", "+1 555 123 4567"},
 	{"TEL2", "Phone 2", "optional"},
 	{"EMAIL", "Email", "jane@example.com"},
-	{"EMAIL2", "Email 2", "optional"}, {"ORG", "Company", "Acme Inc."},
+	{"EMAIL2", "Email 2", "optional"},
+	{"ORG", "Company", "Acme Inc."},
 	{"TITLE", "Title", "Engineer"},
 	{"ADR", "Address", "123 Main St, City"},
 	{"URL", "Website", "https://example.com"},
@@ -141,6 +143,9 @@ func (m Model) updateType(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenForm
 		m.fields = newFields(fieldSpecsFor(qrTypes[m.typeCursor]))
 		m.fieldIndex = 0
+		if len(m.fields) > 0 {
+			return m, m.fields[0].input.Focus()
+		}
 	}
 	return m, nil
 }
@@ -148,9 +153,11 @@ func (m Model) updateType(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "tab", "enter":
-		m.nextField()
+		cmd := m.nextField()
+		return m, cmd
 	case "shift+tab":
-		m.prevField()
+		cmd := m.prevField()
+		return m, cmd
 	case "ctrl+s":
 		m.screen = screenPreview
 		m.previewCursor = 0
@@ -178,6 +185,9 @@ func (m Model) updatePreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.exportPNG()
 		case "Edit":
 			m.screen = screenForm
+			if len(m.fields) > 0 {
+				return m, m.fields[m.fieldIndex].input.Focus()
+			}
 		case "Style":
 			m.message = "Style editing is coming soon ✨"
 		case "Quit":
@@ -185,26 +195,29 @@ func (m Model) updatePreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "esc":
 		m.screen = screenForm
+		if len(m.fields) > 0 {
+			return m, m.fields[m.fieldIndex].input.Focus()
+		}
 	}
 	return m, nil
 }
 
-func (m *Model) nextField() {
+func (m *Model) nextField() tea.Cmd {
 	if len(m.fields) == 0 {
-		return
+		return nil
 	}
 	m.fields[m.fieldIndex].input.Blur()
 	m.fieldIndex = (m.fieldIndex + 1) % len(m.fields)
-	m.fields[m.fieldIndex].input.Focus()
+	return m.fields[m.fieldIndex].input.Focus()
 }
 
-func (m *Model) prevField() {
+func (m *Model) prevField() tea.Cmd {
 	if len(m.fields) == 0 {
-		return
+		return nil
 	}
 	m.fields[m.fieldIndex].input.Blur()
 	m.fieldIndex = (m.fieldIndex - 1 + len(m.fields)) % len(m.fields)
-	m.fields[m.fieldIndex].input.Focus()
+	return m.fields[m.fieldIndex].input.Focus()
 }
 
 func (m Model) View() string {
@@ -237,8 +250,38 @@ func (m Model) typeView() string {
 func (m Model) formView() string {
 	title := "🍬 Candy QR — " + qrTypes[m.typeCursor]
 
+	start, end := 0, len(m.fields)
+	if m.height > 0 {
+		avail := m.height - 6
+		if avail < 6 {
+			avail = 6
+		}
+		maxVisible := avail / 3
+		if maxVisible < 2 {
+			maxVisible = 2
+		}
+		if len(m.fields) > maxVisible {
+			start = m.fieldIndex - maxVisible/2
+			if start < 0 {
+				start = 0
+			}
+			end = start + maxVisible
+			if end > len(m.fields) {
+				end = len(m.fields)
+				start = end - maxVisible
+				if start < 0 {
+					start = 0
+				}
+			}
+		}
+	}
+
 	var form strings.Builder
-	for i, f := range m.fields {
+	if start > 0 {
+		form.WriteString(fmt.Sprintf("  ▲ %d more above\n\n", start))
+	}
+	for i := start; i < end; i++ {
+		f := m.fields[i]
 		cursor := "  "
 		if i == m.fieldIndex {
 			cursor = "> "
@@ -246,13 +289,21 @@ func (m Model) formView() string {
 		form.WriteString(cursor + f.label + "\n")
 		form.WriteString("  " + f.input.View() + "\n\n")
 	}
+	if end < len(m.fields) {
+		form.WriteString(fmt.Sprintf("  ▼ %d more below\n", len(m.fields)-end))
+	}
 
 	preview := m.renderPreview()
 
 	left := lipgloss.NewStyle().Width(40).Render(form.String())
 	right := lipgloss.NewStyle().PaddingLeft(2).Render(preview)
 
-	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	var body string
+	if m.width > 0 && m.width < 75 {
+		body = lipgloss.JoinVertical(lipgloss.Left, left, right)
+	} else {
+		body = lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	}
 
 	return title + "\n\n" + body + "\n\n" + m.footer()
 }

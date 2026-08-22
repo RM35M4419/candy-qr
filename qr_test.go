@@ -181,4 +181,3 @@ func TestNewFieldsFocus(t *testing.T) {
 		t.Error("first field should be focused")
 	}
 }
-
