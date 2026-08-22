@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/skip2/go-qrcode"
+	xdraw "golang.org/x/image/draw"
 )
 
 func (m Model) buildContent() string {
@@ -271,7 +272,6 @@ func drawRoundedRect(img *image.RGBA, x0, y0, x1, y1 int, radius float64, c colo
 		}
 		return
 	}
-	r2 := radius * radius
 	cx0 := float64(x0) + radius
 	cy0 := float64(y0) + radius
 	cx1 := float64(x1) - radius
@@ -281,24 +281,33 @@ func drawRoundedRect(img *image.RGBA, x0, y0, x1, y1 int, radius float64, c colo
 		fy := float64(y) + 0.5
 		for x := x0; x < x1; x++ {
 			fx := float64(x) + 0.5
-			var inside bool
+			var dist float64 = -1.0
 			if fx < cx0 && fy < cy0 {
 				dx, dy := fx-cx0, fy-cy0
-				inside = (dx*dx + dy*dy) <= r2
+				dist = math.Hypot(dx, dy) - radius
 			} else if fx > cx1 && fy < cy0 {
 				dx, dy := fx-cx1, fy-cy0
-				inside = (dx*dx + dy*dy) <= r2
+				dist = math.Hypot(dx, dy) - radius
 			} else if fx < cx0 && fy > cy1 {
 				dx, dy := fx-cx0, fy-cy1
-				inside = (dx*dx + dy*dy) <= r2
+				dist = math.Hypot(dx, dy) - radius
 			} else if fx > cx1 && fy > cy1 {
 				dx, dy := fx-cx1, fy-cy1
-				inside = (dx*dx + dy*dy) <= r2
-			} else {
-				inside = true
+				dist = math.Hypot(dx, dy) - radius
 			}
-			if inside {
+
+			if dist <= -0.5 {
 				img.SetRGBA(x, y, c)
+			} else if dist < 0.5 {
+				alphaFactor := 0.5 - dist
+				if alphaFactor > 0 {
+					orig := img.RGBAAt(x, y)
+					a := float64(c.A) / 255.0 * alphaFactor
+					nr := uint8(float64(c.R)*a + float64(orig.R)*(1.0-a) + 0.5)
+					ng := uint8(float64(c.G)*a + float64(orig.G)*(1.0-a) + 0.5)
+					nb := uint8(float64(c.B)*a + float64(orig.B)*(1.0-a) + 0.5)
+					img.SetRGBA(x, y, color.RGBA{R: nr, G: ng, B: nb, A: 255})
+				}
 			}
 		}
 	}
@@ -318,29 +327,20 @@ func scaleAndOverlayLogo(dst *image.RGBA, logo image.Image, x0, y0, x1, y1 int) 
 	}
 
 	scale := math.Min(float64(targetW)/float64(srcW), float64(targetH)/float64(srcH))
-	w := int(float64(srcW) * scale)
-	h := int(float64(srcH) * scale)
+	w := int(float64(srcW)*scale + 0.5)
+	h := int(float64(srcH)*scale + 0.5)
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
 	offsetX := x0 + (targetW-w)/2
 	offsetY := y0 + (targetH-h)/2
 
-	for dy := 0; dy < h; dy++ {
-		sy := bounds.Min.Y + int(float64(dy)*float64(srcH)/float64(h))
-		for dx := 0; dx < w; dx++ {
-			sx := bounds.Min.X + int(float64(dx)*float64(srcW)/float64(w))
-			c := logo.At(sx, sy)
-			r, g, b, a := c.RGBA()
-			if a > 0 {
-				dstX := offsetX + dx
-				dstY := offsetY + dy
-				orig := dst.RGBAAt(dstX, dstY)
-				alpha := float64(a) / 65535.0
-				nr := uint8(float64(r>>8)*alpha + float64(orig.R)*(1.0-alpha))
-				ng := uint8(float64(g>>8)*alpha + float64(orig.G)*(1.0-alpha))
-				nb := uint8(float64(b>>8)*alpha + float64(orig.B)*(1.0-alpha))
-				dst.SetRGBA(dstX, dstY, color.RGBA{R: nr, G: ng, B: nb, A: 255})
-			}
-		}
-	}
+	dstRect := image.Rect(offsetX, offsetY, offsetX+w, offsetY+h)
+	// Catmull-Rom high-quality bicubic downsampling filter
+	xdraw.CatmullRom.Scale(dst, dstRect, logo, bounds, xdraw.Over, nil)
 }
 
 func renderStyledPNG(content string, style QRStyle, size int, filename string) error {
@@ -443,7 +443,7 @@ func renderStyledPNG(content string, style QRStyle, size int, filename string) e
 				badgeRadius := float64(badgeSize) * 0.20
 				drawRoundedRect(img, bx0, by0, bx1, by1, badgeRadius, bg)
 
-				pad := int(float64(badgeSize) * 0.12)
+				pad := int(float64(badgeSize) * 0.10)
 				scaleAndOverlayLogo(img, logoImg, bx0+pad, by0+pad, bx1-pad, by1-pad)
 			}
 		}
@@ -465,7 +465,7 @@ func (m *Model) exportPNG() {
 		return
 	}
 	filename := "candy-qr.png"
-	if err := renderStyledPNG(content, m.style, 512, filename); err != nil {
+	if err := renderStyledPNG(content, m.style, 1024, filename); err != nil {
 		m.message = "Export failed: " + err.Error()
 		return
 	}
